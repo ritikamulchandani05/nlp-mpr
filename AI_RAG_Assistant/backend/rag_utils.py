@@ -210,8 +210,10 @@ def source_payload(chunks):
 # LLM access (Groq or Ollama), always as a generator of text tokens
 # ---------------------------------------------------------------------------
 def _provider():
-    if config.LLM_PROVIDER in ("groq", "ollama", "lmstudio"):
+    if config.LLM_PROVIDER in ("gemini", "groq", "ollama", "lmstudio"):
         return config.LLM_PROVIDER
+    if config.GEMINI_API_KEY:
+        return "gemini"
     return "groq" if config.GROQ_API_KEY else "lmstudio"
 
 
@@ -219,32 +221,31 @@ class Thought(str):
     """A reasoning/"thinking" token from the model, kept apart from answer text."""
 
 
-def _lmstudio_stream(messages, temperature):
-    base = config.LMSTUDIO_URL.rstrip("/")
+def _openai_compat_stream(base, model, messages, temperature, name, api_key=None):
+    """Stream from any OpenAI-compatible /chat/completions endpoint (LM Studio, Gemini)."""
+    base = base.rstrip("/")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
-        model = config.LMSTUDIO_MODEL
         if not model:
-            models = requests.get(f"{base}/models", timeout=10).json().get("data", [])
+            models = requests.get(f"{base}/models", headers=headers, timeout=10).json().get("data", [])
             if not models:
-                raise RuntimeError("LM Studio has no model loaded. Load one in LM Studio first.")
+                raise RuntimeError(f"{name} has no model loaded. Load one first.")
             model = models[0]["id"]
-        with requests.post(f"{base}/chat/completions", stream=True, timeout=600, json={
+        with requests.post(f"{base}/chat/completions", headers=headers, stream=True, timeout=600, json={
                 "model": model, "messages": messages, "temperature": temperature,
                 "stream": True}) as r:
             if r.status_code != 200:
-                raise RuntimeError(f"LM Studio error {r.status_code}: {r.text[:300]}")
+                raise RuntimeError(f"{name} error {r.status_code}: {r.text[:300]}")
             for line in r.iter_lines():
                 if not line.startswith(b"data: "):
                     continue
-                payload = line[6:]
+                payload = line[6:].strip()
                 if payload == b"[DONE]":
                     break
                 data = json.loads(payload)
                 if data.get("error"):
                     err = data["error"]
-                    raise RuntimeError("LM Studio error: " + (err.get("message", str(err)) if isinstance(err, dict) else str(err))
-                                       + ". Check LM Studio's server log; this is often GPU out-of-memory "
-                                       "(lower GPU offload or context length).")
+                    raise RuntimeError(f"{name} error: " + (err.get("message", str(err)) if isinstance(err, dict) else str(err)))
                 choices = data.get("choices") or []
                 delta = choices[0].get("delta", {}) if choices else {}
                 if delta.get("reasoning_content"):
@@ -252,13 +253,18 @@ def _lmstudio_stream(messages, temperature):
                 if delta.get("content"):
                     yield delta["content"]
     except requests.ConnectionError:
-        raise RuntimeError(f"Cannot reach LM Studio at {base}. Start its local server "
-                           "(Developer tab → Start Server) and load a model.")
+        raise RuntimeError(f"Cannot reach {name} at {base}.")
 
 
 def llm_stream(messages, model=None, temperature=0.2):
-    if _provider() == "lmstudio":
-        yield from _lmstudio_stream(messages, temperature)
+    if _provider() == "gemini":
+        if not config.GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY is not set (see backend/.env.example).")
+        yield from _openai_compat_stream(config.GEMINI_URL, config.GEMINI_MODEL, messages,
+                                         temperature, "Gemini", config.GEMINI_API_KEY)
+    elif _provider() == "lmstudio":
+        yield from _openai_compat_stream(config.LMSTUDIO_URL, config.LMSTUDIO_MODEL, messages,
+                                         temperature, "LM Studio")
     elif _provider() == "groq":
         if not config.GROQ_API_KEY:
             raise RuntimeError("GROQ_API_KEY is not set (see backend/.env.example).")
