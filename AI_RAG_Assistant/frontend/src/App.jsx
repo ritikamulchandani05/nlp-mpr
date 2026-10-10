@@ -102,6 +102,8 @@ export default function App() {
     setStreaming(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    let stoppedByUser = false;
+    ctrl.signal.addEventListener("abort", () => { stoppedByUser = true; });
     try {
       const res = await fetch(`${API}/sessions/${sid}/query-stream`, { ...jsonOpts("POST", { question, mode }), signal: ctrl.signal });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Request failed (${res.status})`);
@@ -129,7 +131,7 @@ export default function App() {
     } finally {
       setStreaming(false);
       abortRef.current = null;
-      patchLast((x) => (x.content || x.error ? {} : { content: "_Stopped._" }));
+      patchLast((x) => (x.content || x.error ? {} : stoppedByUser ? { content: "_Stopped._" } : { error: "No response received from the model." }));
       refreshSessions();
     }
   };

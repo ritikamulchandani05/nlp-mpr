@@ -215,6 +215,10 @@ def _provider():
     return "groq" if config.GROQ_API_KEY else "lmstudio"
 
 
+class Thought(str):
+    """A reasoning/"thinking" token from the model, kept apart from answer text."""
+
+
 def _lmstudio_stream(messages, temperature):
     base = config.LMSTUDIO_URL.rstrip("/")
     try:
@@ -236,8 +240,11 @@ def _lmstudio_stream(messages, temperature):
                 if payload == b"[DONE]":
                     break
                 choices = json.loads(payload).get("choices") or []
-                if choices and choices[0].get("delta", {}).get("content"):
-                    yield choices[0]["delta"]["content"]
+                delta = choices[0].get("delta", {}) if choices else {}
+                if delta.get("reasoning_content"):
+                    yield Thought(delta["reasoning_content"])
+                if delta.get("content"):
+                    yield delta["content"]
     except requests.ConnectionError:
         raise RuntimeError(f"Cannot reach LM Studio at {base}. Start its local server "
                            "(Developer tab → Start Server) and load a model.")
@@ -273,7 +280,21 @@ def llm_stream(messages, model=None, temperature=0.2):
 
 
 def llm_complete(messages, model=None, temperature=0.2):
-    return "".join(llm_stream(messages, model, temperature))
+    return "".join(t for t in llm_stream(messages, model, temperature) if not isinstance(t, Thought))
+
+
+def stream_events(messages, model, temperature):
+    """Turn llm_stream tokens into content/reasoning events; fail loudly on empty output."""
+    got_answer = False
+    for token in llm_stream(messages, model, temperature):
+        if isinstance(token, Thought):
+            yield {"type": "reasoning", "text": token}
+        else:
+            got_answer = True
+            yield {"type": "content", "text": token}
+    if not got_answer:
+        raise RuntimeError("The model returned no answer text. If it is a reasoning model, raise its "
+                           "max tokens / context length in LM Studio, or try a shorter question.")
 
 
 def _history_messages(history, limit=6):
@@ -302,8 +323,7 @@ def answer_query(session_id, question, mode, history):
     messages = [{"role": "system", "content": system}, *_history_messages(history),
                 {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}]
     yield {"type": "status", "message": "Generating answer…"}
-    for token in llm_stream(messages, cfg["model"], cfg["temperature"]):
-        yield {"type": "content", "text": token}
+    yield from stream_events(messages, cfg["model"], cfg["temperature"])
 
 
 def _decompose(question):
@@ -336,8 +356,7 @@ def _reasoning_pipeline(session_id, question, context, cfg, history):
     joined = "\n\n".join(f"Sub-question: {q}\nAnswer: {a}" for q, a in answers)
     messages = [{"role": "system", "content": config.SYNTHESIS_PROMPT},
                 {"role": "user", "content": f"Original question: {question}\n\nContext:\n{context}\n\n{joined}"}]
-    for token in llm_stream(messages, cfg["model"], cfg["temperature"]):
-        yield {"type": "content", "text": token}
+    yield from stream_events(messages, cfg["model"], cfg["temperature"])
 
 
 def summarize_file(session_id, filename, max_chars=24000):
