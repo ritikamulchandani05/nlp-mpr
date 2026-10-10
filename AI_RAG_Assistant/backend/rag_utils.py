@@ -210,13 +210,43 @@ def source_payload(chunks):
 # LLM access (Groq or Ollama), always as a generator of text tokens
 # ---------------------------------------------------------------------------
 def _provider():
-    if config.LLM_PROVIDER in ("groq", "ollama"):
+    if config.LLM_PROVIDER in ("groq", "ollama", "lmstudio"):
         return config.LLM_PROVIDER
-    return "groq" if config.GROQ_API_KEY else "ollama"
+    return "groq" if config.GROQ_API_KEY else "lmstudio"
+
+
+def _lmstudio_stream(messages, temperature):
+    base = config.LMSTUDIO_URL.rstrip("/")
+    try:
+        model = config.LMSTUDIO_MODEL
+        if not model:
+            models = requests.get(f"{base}/models", timeout=10).json().get("data", [])
+            if not models:
+                raise RuntimeError("LM Studio has no model loaded. Load one in LM Studio first.")
+            model = models[0]["id"]
+        with requests.post(f"{base}/chat/completions", stream=True, timeout=600, json={
+                "model": model, "messages": messages, "temperature": temperature,
+                "stream": True}) as r:
+            if r.status_code != 200:
+                raise RuntimeError(f"LM Studio error {r.status_code}: {r.text[:300]}")
+            for line in r.iter_lines():
+                if not line.startswith(b"data: "):
+                    continue
+                payload = line[6:]
+                if payload == b"[DONE]":
+                    break
+                choices = json.loads(payload).get("choices") or []
+                if choices and choices[0].get("delta", {}).get("content"):
+                    yield choices[0]["delta"]["content"]
+    except requests.ConnectionError:
+        raise RuntimeError(f"Cannot reach LM Studio at {base}. Start its local server "
+                           "(Developer tab → Start Server) and load a model.")
 
 
 def llm_stream(messages, model=None, temperature=0.2):
-    if _provider() == "groq":
+    if _provider() == "lmstudio":
+        yield from _lmstudio_stream(messages, temperature)
+    elif _provider() == "groq":
         if not config.GROQ_API_KEY:
             raise RuntimeError("GROQ_API_KEY is not set (see backend/.env.example).")
         from groq import Groq

@@ -14,7 +14,10 @@ CHROMA_DIR = BASE_DIR / "chroma_sessions"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
-# "groq", "ollama" or "auto" (groq when a key is present, otherwise ollama)
+LMSTUDIO_URL = os.getenv("LMSTUDIO_URL", "http://localhost:1234/v1")
+# Leave empty to use whichever model LM Studio has loaded
+LMSTUDIO_MODEL = os.getenv("LMSTUDIO_MODEL", "")
+# "groq", "lmstudio", "ollama" or "auto" (groq when a key is present, otherwise lmstudio)
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").lower()
 
 # --- Models ----------------------------------------------------------------

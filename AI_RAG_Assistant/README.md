@@ -7,18 +7,17 @@ Retrieval-Augmented Generation over your own PDFs. Flask backend, React frontend
 - **Sessions**: isolated files, vector store and persistent history per chat; auto-titled
 - **Streaming**: Server-Sent Events (status, sources, reasoning, content); Stop button
 - **Citations**: page-level sources with snippets
-- **LLMs**: Groq API (default when `GROQ_API_KEY` is set) or local Ollama (Llama 3.2)
+- **LLMs**: local LM Studio (default), Groq API (when `GROQ_API_KEY` is set), or Ollama
 
 ## Setup
-Requires Python 3.10+, Node 18+, and either a Groq key or Ollama.
+Requires Python 3.10+, Node 18+, and an LLM: LM Studio (local server on), a Groq key, or Ollama.
 
 ```bash
 # backend
 cd backend
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # set GROQ_API_KEY, or leave empty and use Ollama
-ollama pull llama3.2          # only for local mode
+cp .env.example .env          # defaults to LM Studio at localhost:1234
 python app.py                 # http://localhost:5000
 
 # frontend (new terminal)
@@ -29,8 +28,8 @@ npm start                     # http://localhost:3000
 The first upload/query downloads the embedding and reranker models from Hugging Face.
 
 ## Configuration
-Environment variables (`backend/.env`): `GROQ_API_KEY`, `LLM_PROVIDER` (`groq|ollama|auto`),
-`OLLAMA_MODEL`, `GROQ_MAIN_MODEL` (default `openai/gpt-oss-120b`), `GROQ_FAST_MODEL`.
+Environment variables (`backend/.env`): `GROQ_API_KEY`, `LLM_PROVIDER` (`lmstudio|groq|ollama|auto`),
+`LMSTUDIO_URL`, `LMSTUDIO_MODEL`, `OLLAMA_MODEL`, `GROQ_MAIN_MODEL` (default `openai/gpt-oss-120b`), `GROQ_FAST_MODEL`.
 Chunking and retrieval parameters live in `backend/config.py`. The frontend reads `VITE_API_URL`
 (default `http://localhost:5000`).
 
