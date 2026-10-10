@@ -239,7 +239,13 @@ def _lmstudio_stream(messages, temperature):
                 payload = line[6:]
                 if payload == b"[DONE]":
                     break
-                choices = json.loads(payload).get("choices") or []
+                data = json.loads(payload)
+                if data.get("error"):
+                    err = data["error"]
+                    raise RuntimeError("LM Studio error: " + (err.get("message", str(err)) if isinstance(err, dict) else str(err))
+                                       + ". Check LM Studio's server log; this is often GPU out-of-memory "
+                                       "(lower GPU offload or context length).")
+                choices = data.get("choices") or []
                 delta = choices[0].get("delta", {}) if choices else {}
                 if delta.get("reasoning_content"):
                     yield Thought(delta["reasoning_content"])
