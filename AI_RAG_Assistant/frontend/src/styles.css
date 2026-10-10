@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply min-h-screen text-slate-100 antialiased;
+  background: linear-gradient(135deg, #3b0764 0%, #1e1b4b 45%, #0f172a 100%);
+  background-attachment: fixed;
+}
+
+.glass {
+  @apply border border-white/10 bg-white/5 backdrop-blur-xl;
+}
+
+:focus-visible {
+  @apply outline-none ring-2 ring-fuchsia-400;
+}
+
+.markdown > * + * { @apply mt-3; }
+.markdown h1, .markdown h2, .markdown h3 { @apply font-semibold text-white; }
+.markdown h1 { @apply text-xl; } .markdown h2 { @apply text-lg; } .markdown h3 { @apply text-base; }
+.markdown ul { @apply list-disc pl-6; } .markdown ol { @apply list-decimal pl-6; }
+.markdown code { @apply rounded bg-black/30 px-1 py-0.5 text-sm; }
+.markdown pre { @apply overflow-x-auto rounded-lg bg-black/40 p-3; }
+.markdown pre code { @apply bg-transparent p-0; }
+.markdown table { @apply w-full border-collapse text-sm; }
+.markdown th, .markdown td { @apply border border-white/20 px-2 py-1 text-left; }
+.markdown a { @apply text-fuchsia-300 underline; }
+.markdown blockquote { @apply border-l-4 border-fuchsia-400/60 pl-3 text-slate-300; }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
